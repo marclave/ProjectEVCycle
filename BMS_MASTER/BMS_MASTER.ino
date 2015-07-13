@@ -35,26 +35,44 @@
 #define BLINDSPOT_MONITOR_PIN_9 9
 #define BLINDSPOT_MONITOR_PIN_10 10
 
-#define BLINDSPOT_PWM_PIN_10
-#define BLINDSPOT_PWM_PIN_11
+#define BLINDSPOT_PWM_PIN_10 // TODO m: something else
+#define BLINDSPOT_PWM_PIN_11 // TODO m: something else
+
+/**** Defines for Identifiers and other CAN related items ****/
+#define ESS_IDENTIFIER             0x300
+#define TRACTIVE_SYSTEM_IDENTIFIER 0x200
+#define WARNINGS_IDENTIFIER        0x100
+
 
 // demo: CAN-BUS Shield, send data
 #include <mcp_can.h>
 #include <SPI.h>
 
-unsigned char len = 0;
 unsigned char buf[8];
-unsigned char flagReceive = 0;
-uint32_t canID = 0;
 
-void MCP2515_ISR()
-{
-     flagReceive = 1;
-}
+//MCP_CAN CAN(10);                                      // Set CS to pin 10
 
 void fault(char* location, char* message)
 {
  // Do something with the location... kind of awkward if its the CAN place :3 
+}
+
+void underVoltageMessage(void)
+{
+    buf[0] = 0x20;
+    CAN.sendMsgBuf(WARNINGS_IDENTIFIER, 0, 8, buf);
+    delay(100);
+    buf[0] = 0x00;
+    // TODO m: go to fault state 
+}
+
+void overVoltageMessage(void)
+{
+  buf[0] = 0x04;
+  CAN.sendMsgBuf(WARNINGS_IDENTIFIER, 0, 8, buf);
+  delay(100);
+  buf[0] = 0x00;
+  // TODO m: go to fault state
 }
 
 void checkVoltage(void)
@@ -67,64 +85,54 @@ void checkVoltage(void)
   
   if(cellGroup0 < GROUP_MIN_VOTLAGE)
   {
-    // Send can message
-    // Go to fault state
+    underVoltageMessage();
   }
   else if(cellGroup0 > GROUP_MAX_VOLTAGE)
   {
-     // Send can message
-     // Go to fault state
+    overVoltageMessage();
   } 
   
   if(cellGroup1 < GROUP_MIN_VOTLAGE)
   {
-    // Send can message
-    // Go to fault state
+     underVoltageMessage();
   } 
   else if(cellGroup1 > GROUP_MAX_VOLTAGE)
   {
-     // Send can message
-     // Go to fault state
+     overVoltageMessage();
   } 
   
   if(cellGroup2 < GROUP_MIN_VOTLAGE)
   {
-    // Send can message
-    // Go to fault state
+     underVoltageMessage();
   }
   else if(cellGroup2 > GROUP_MAX_VOLTAGE)
   {
-     // Send can message
-     // Go to fault state
+     overVoltageMessage();
   } 
   
   if(cellGroup3 < GROUP_MIN_VOTLAGE)
   {
-    // Send can message
-    // Go to fault state
+     underVoltageMessage();
   }
   else if(cellGroup3 > GROUP_MAX_VOLTAGE)
   {
-     // Send can message
-     // Go to fault state
+     overVoltageMessage();
   } 
   
   if(cellGroup4 < GROUP_MIN_VOTLAGE)
   {
-    // Send can message
-    // Go to fault state
+     underVoltageMessage();
   }
   else if(cellGroup4 > GROUP_MAX_VOLTAGE)
   {
-     // Send can message
-     // Go to fault state
+     overVoltageMessage();
   } 
   
-  // ALL IS GOOD
-  // TODO m: need to figure out this bad boy
-  unsigned char canMsg[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-  //CAN.sendMsgBuf(ID, 0, 8, canMsg);
- // TODO m: also send total voltage rating? 
+  // Now send total voltage
+  buf[1] = cellGroup0 + cellGroup1 + cellGroup2 + cellGroup3 + cellGroup4;
+  CAN.sendMsgBuf(ESS_IDENTIFIER, 0, 8, buf);
+  delay(100);
+  buf[1] = 0x00;
 }
 
 void checkTemperature(void)
@@ -132,18 +140,27 @@ void checkTemperature(void)
   uint16_t ambientTemp = analogRead(AMBIENT_TEMP_PIN_13);
   if (ambientTemp < TEMPERATURE_MIN)
   {
-    // Send underT can message
+    buf[0] = 0x10;
+    CAN.sendMsgBuf(WARNINGS_IDENTIFIER, 0, 8, buf);
+    delay(100);
+    buf[0] = 0x00;
+  // TODO m: go to fault state
   }
   else if (ambientTemp > TEMPERATURE_MAX)
   {
-    // Send overT can message
+    buf[0] = 0x10;
+    CAN.sendMsgBuf(WARNINGS_IDENTIFIER, 0, 8, buf);
+    delay(100);
+    buf[0] = 0x00;
+  // TODO m: go to fault state
   }
   else
   {
-    // ALL IS GOOD  // TODO m: need to figure out this bad boy
-     unsigned char canMsg[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-     //CAN.sendMsgBuf(ID, 0, 8, canMsg);
-    // TODO m: also send temp 
+    // Now send total temp
+    buf[0] = ambientTemp;
+    CAN.sendMsgBuf(ESS_IDENTIFIER, 0, 8, buf);
+    delay(100);
+    buf[0] = 0x00;
   }
 }
 
@@ -152,7 +169,7 @@ void setup(void)
   Serial.begin(9600);
 
   // Initialize the can bus at 500KHz
-  if(CAN.begin(CAN_500KBPS) == CAN_OK)
+  if(CAN_OK == CAN.begin(CAN_500KBPS))
   {
        Serial.print("CAN init OK!!\r\n");
   }
@@ -161,22 +178,6 @@ void setup(void)
     Serial.print("Can init fail!!\r\n");
     // TODO m: need to do some CAN handling properly
   }
-  attachInterrupt(0, MCP2515_ISR, FALLING); // start interrupt
-  checkVoltage();
-  checkTemperature();
-  
-  // At this point if errors we would be at fault, so now send OK to pi and wait for recv OK while checking others
-  // CAN.sendMsgBuf(0x07B, 0, 8, canMsg);  
-  while((flagReceive && 0x01) != 0x01)
-  {
-    // Wait till recieved flag while checking other things
-    checkVoltage();
-    checkTemperature();
-  }
-  
-  // Received a message!
-  CAN.readMsgBuf(&len, buf);    // read data,  len: data length, buf: data buf
-  canID = CAN.getCanId();
 } 
 
 void checkPressure(void)
