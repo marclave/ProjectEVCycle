@@ -4,19 +4,10 @@
 */
 
 /**** Defines for battery ****/
-#define CELL_MAX_VOLTAGE 4.2*1023
-#define CELL_MIN_VOLTAGE 3.2*1023
-#define CELL_GROUP_VALUE 6
-
-// TODO m: need to change the threshold fur shur
-#define GROUP_MAX_VOLTAGE CELL_GROUP_VALUE*CELL_MAX_VOLTAGE
-#define GROUP_MIN_VOTLAGE CELL_GROUP_VALUE*CELL_MIN_VOLTAGE
 
 #define CELL_GROUP_PIN_0 0
 #define CELL_GROUP_PIN_1 1
 #define CELL_GROUP_PIN_2 2
-#define CELL_GROUP_PIN_3 3
-#define CELL_GROUP_PIN_4 4
 
 /**** Defines for temperature ****/
 #define TEMPERATURE_MAX 180
@@ -43,14 +34,17 @@
 #define TRACTIVE_SYSTEM_IDENTIFIER 0x200
 #define WARNINGS_IDENTIFIER        0x100
 
-
 // demo: CAN-BUS Shield, send data
 #include <mcp_can.h>
 #include <SPI.h>
 
-unsigned char buf[8];
+// the cs pin of the version after v1.1 is default to D9
+// v0.9b and v1.0 is default D10
+const int SPI_CS_PIN = 9;
 
-//MCP_CAN CAN(10);                                      // Set CS to pin 10
+MCP_CAN CAN(SPI_CS_PIN);                                   // Set CS to pin 10
+
+unsigned char buf[8];
 
 void fault(char* location, char* message)
 {
@@ -77,67 +71,52 @@ void overVoltageMessage(void)
 
 void checkVoltage(void)
 {
-  uint16_t cellGroup0 = analogRead(CELL_GROUP_PIN_0);
-  uint16_t cellGroup1 = analogRead(CELL_GROUP_PIN_1);
-  uint16_t cellGroup2 = analogRead(CELL_GROUP_PIN_2);
-  uint16_t cellGroup3 = analogRead(CELL_GROUP_PIN_3);
-  uint16_t cellGroup4 = analogRead(CELL_GROUP_PIN_4);
+//  unsigned char cellGroup0 = digitalRead(CELL_GROUP_PIN_0);
+//  bool cellGroup1 = digitalRead(CELL_GROUP_PIN_1);
+//  bool cellGroup2 = digitalRead(CELL_GROUP_PIN_2);
+
+  unsigned char cellGroup0 = 1;
+  unsigned char cellGroup1 = 0;
+  unsigned char cellGroup2 = 0;
   
-  if(cellGroup0 < GROUP_MIN_VOTLAGE)
+  if(cellGroup0)
   {
     underVoltageMessage();
   }
-  else if(cellGroup0 > GROUP_MAX_VOLTAGE)
+  else
   {
     overVoltageMessage();
   } 
   
-  if(cellGroup1 < GROUP_MIN_VOTLAGE)
+  if(cellGroup1)
   {
      underVoltageMessage();
   } 
-  else if(cellGroup1 > GROUP_MAX_VOLTAGE)
+  else
   {
      overVoltageMessage();
   } 
   
-  if(cellGroup2 < GROUP_MIN_VOTLAGE)
+  if(cellGroup2)
   {
      underVoltageMessage();
   }
-  else if(cellGroup2 > GROUP_MAX_VOLTAGE)
+  else
   {
      overVoltageMessage();
-  } 
-  
-  if(cellGroup3 < GROUP_MIN_VOTLAGE)
-  {
-     underVoltageMessage();
   }
-  else if(cellGroup3 > GROUP_MAX_VOLTAGE)
-  {
-     overVoltageMessage();
-  } 
-  
-  if(cellGroup4 < GROUP_MIN_VOTLAGE)
-  {
-     underVoltageMessage();
-  }
-  else if(cellGroup4 > GROUP_MAX_VOLTAGE)
-  {
-     overVoltageMessage();
-  } 
   
   // Now send total voltage
-  buf[1] = cellGroup0 + cellGroup1 + cellGroup2 + cellGroup3 + cellGroup4;
-  CAN.sendMsgBuf(ESS_IDENTIFIER, 0, 8, buf);
-  delay(100);
+  //buf[1] = cellGroup0 + cellGroup1 + cellGroup2 + cellGroup3 + cellGroup4;
+  //CAN.sendMsgBuf(ESS_IDENTIFIER, 0, 8, buf);
+  //delay(100);
   buf[1] = 0x00;
 }
 
 void checkTemperature(void)
 {
-  uint16_t ambientTemp = analogRead(AMBIENT_TEMP_PIN_13);
+  //uint16_t ambientTemp = analogRead(AMBIENT_TEMP_PIN_13);
+  uint16_t ambientTemp = 400; // This is for testing
   if (ambientTemp < TEMPERATURE_MIN)
   {
     buf[0] = 0x10;
@@ -148,7 +127,7 @@ void checkTemperature(void)
   }
   else if (ambientTemp > TEMPERATURE_MAX)
   {
-    buf[0] = 0x10;
+    buf[0] = 0x02;
     CAN.sendMsgBuf(WARNINGS_IDENTIFIER, 0, 8, buf);
     delay(100);
     buf[0] = 0x00;
@@ -193,7 +172,7 @@ void checkBlindSpots(void)
 void loop(void)
 {
   checkVoltage();
-  checkTemperature();
-  checkBlindSpots();
-  checkPressure();
+  //checkTemperature();
+  //checkBlindSpots();
+  //checkPressure();
 }
